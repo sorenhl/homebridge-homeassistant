@@ -151,6 +151,11 @@ HomeAssistantPlatform.prototype = {
           continue;
         }
 
+        // Only show devices containing homebridge = true
+	if(!entity.attributes || !entity.attributes.homebridge) {
+          continue;
+        }
+
         // ignore hidden devices
         if (entity.attributes && entity.attributes.hidden) {
           continue;
