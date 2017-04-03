@@ -1,135 +1,187 @@
-var Service, Characteristic, communicationError;
+'use strict';
 
-module.exports = function (oService, oCharacteristic, oCommunicationError) {
-  Service = oService;
-  Characteristic = oCharacteristic;
-  communicationError = oCommunicationError;
+let Service;
+let Characteristic;
+let communicationError;
 
-  return HomeAssistantCover;
-};
-module.exports.HomeAssistantCover = HomeAssistantCover;
-
-function HomeAssistantCover(log, data, client, cover_type) {
-  this.client = client
-  this.log = log;
-  // device info
-  this.domain = "cover"
-  this.data = data
-  this.entity_id = data.entity_id
-  this.uuid_base = data.entity_id
-  if (data.attributes && data.attributes.friendly_name) {
-    this.name = data.attributes.friendly_name
-  }else{
-    this.name = data.entity_id.split(".").pop().replace(/_/g, " ")
+class HomeAssistantCover {
+  constructor(log, data, client) {
+    this.client = client;
+    this.log = log;
+    // device info
+    this.domain = 'cover';
+    this.data = data;
+    this.entity_id = data.entity_id;
+    this.uuid_base = data.entity_id;
+    if (data.attributes && data.attributes.friendly_name) {
+      this.name = data.attributes.friendly_name;
+    } else {
+      this.name = data.entity_id.split('.').pop().replace(/_/g, ' ');
+    }
   }
-  this.cover_type = cover_type;
+
+  onEvent(oldState, newState) {
+    const state = this.transformData(newState);
+
+    this.service.getCharacteristic(this.stateCharacteristic)
+        .setValue(state, null, 'internal');
+    this.service.getCharacteristic(this.targetCharacteristic)
+        .setValue(state, null, 'internal');
+  }
+
+  getState(callback) {
+    this.client.fetchState(this.entity_id, (data) => {
+      if (data) {
+        callback(null, this.transformData(data));
+      } else {
+        callback(communicationError);
+      }
+    });
+  }
+
+  getServices() {
+    const informationService = new Service.AccessoryInformation();
+    informationService
+          .setCharacteristic(Characteristic.Manufacturer, 'Home Assistant')
+          .setCharacteristic(Characteristic.SerialNumber, this.entity_id)
+          .setCharacteristic(Characteristic.Model, this.model);
+
+    this.service
+        .getCharacteristic(this.stateCharacteristic)
+        .on('get', this.getState.bind(this));
+
+    this.service
+        .getCharacteristic(this.targetCharacteristic)
+        .on('get', this.getState.bind(this))
+        .on('set', this.setTargetState.bind(this));
+
+    return [informationService, this.service];
+  }
+
+  doChangeState(service, callback) {
+    const serviceData = {
+      entity_id: this.entity_id,
+    };
+
+    this.log(`Calling service ${service} on ${this.name}`);
+
+    this.client.callService(this.domain, service, serviceData, (data) => {
+      if (data) {
+        callback();
+      } else {
+        callback(communicationError);
+      }
+    });
+  }
 }
 
-HomeAssistantCover.prototype = {
-  onEvent: function(old_state, new_state) {
-    var coverState = new_state.attributes.current_position == 100 ? 0 : 1;
-    this.coverService.getCharacteristic(Characteristic.CurrentDoorState)
-        .setValue(coverState, null, "internal");
-    this.coverService.getCharacteristic(Characteristic.TargetDoorState)
-        .setValue(coverState, null, "internal");
-  },
-  getCoverState: function(callback){
-    this.client.fetchState(this.entity_id, function(data){
-      if (data) {
-        coverState = data.state == "closed"
-        callback(null, coverState)
-      }else{
-        callback(communicationError)
-      }
-    }.bind(this))
-  },
-  setCoverState: function(coverOn, callback, context) {
-    if (context == "internal") {
+class HomeAssistantGarageDoor extends HomeAssistantCover {
+  constructor(log, data, client) {
+    super(log, data, client);
+    this.model = 'Garage Door';
+    this.service = new Service.GarageDoorOpener();
+    this.stateCharacteristic = Characteristic.CurrentDoorState;
+    this.targetCharacteristic = Characteristic.TargetDoorState;
+  }
+
+  transformData(data) {
+    return data.state === 'closed' ? this.stateCharacteristic.CLOSED : this.stateCharacteristic.OPEN;
+  }
+
+  setTargetState(targetState, callback, context) {
+    if (context === 'internal') {
       callback();
       return;
     }
 
-    var that = this;
-    var service_data = {
-      entity_id: this.entity_id
-    }
+    this.doChangeState(targetState === Characteristic.TargetDoorState.CLOSED ? 'close_cover' : 'open_cover', callback);
+  }
+}
 
-    if (coverOn) {
-      this.log("Setting cover state on the "+this.name+" to closed");
-
-      this.client.callService(this.domain, "close_cover", service_data, function(data){
-        if (data) {
-          that.log("Successfully set cover state on the "+that.name+" to closed");
-          callback()
-        }else{
-          callback(communicationError)
-        }
-      }.bind(this))
-    }else{
-      this.log("Setting cover state on the "+this.name+" to open");
-
-      this.client.callService(this.domain, "open_cover", service_data, function(data){
-        if (data) {
-          that.log("Successfully set cover state on the "+that.name+" to open");
-          callback()
-        }else{
-          callback(communicationError)
-        }
-      }.bind(this))
-    }
-  },
-  getPosition: function(callback){
-    this.client.fetchState(this.entity_id, function(data){
-      if (data && data.attributes) {
-        callback(null, data.attributes.current_position)
-      }else{
-        callback(communicationError)
-      }
-    }.bind(this))
-  },
-  setPosition: function(position, callback, context) {
-    var that = this;
-    var payload = {
-      entity_id: this.entity_id,
-      position: position
-    };
-
-    this.log("Setting the state of the "+this.name+" to "+ payload.position);
-
-    this.client.callService(this.domain, "set_cover_position", payload, function(data){
-      if (data) {
-        that.log("Successfully set position of "+that.name+" to "+ payload.position);
-        callback()
-      }else{
-        callback(communicationError)
-      }
-    }.bind(this))
-  },
-  getServices: function() {
-    this.coverService = (this.cover_type === "garage_door") ? new Service.GarageDoorOpener() : new Service.WindowCovering();
-    this.model = (this.cover_type === "garage_door") ? "Garage Door" : "Rollershutter";
-    this.stateCharacteristic = (this.cover_type === "garage_door") ? Characteristic.CurrentDoorState : Characteristic.CurrentPosition;
-    this.targetCharacteristic = (this.cover_type === "garage_door") ? Characteristic.TargetDoorState : Characteristic.TargetPosition;
-    this.stateCharacteristicGetFunction = (this.cover_type === "garage_door") ? this.getCoverState : this.getPosition;
-    this.targetCharacteristicGetFunction = (this.cover_type === "garage_door") ? this.getCoverState : this.getPosition;
-    this.targetCharacteristicSetFunction = (this.cover_type === "garage_door") ? this.setCoverState : this.setPosition;
-
-    var informationService = new Service.AccessoryInformation();
-    informationService
-        .setCharacteristic(Characteristic.Manufacturer, "Home Assistant")
-        .setCharacteristic(Characteristic.SerialNumber, this.entity_id)
-        .setCharacteristic(Characteristic.Model, this.model);
-
-    this.coverService
-      .getCharacteristic(this.stateCharacteristic)
-      .on("get", this.stateCharacteristicGetFunction.bind(this));
-
-    this.coverService
-      .getCharacteristic(this.targetCharacteristic)
-      .on("get", this.targetCharacteristicGetFunction.bind(this))
-      .on("set", this.targetCharacteristicSetFunction.bind(this));
-
-    return [informationService, this.coverService];
+class HomeAssistantRollershutter extends HomeAssistantCover {
+  constructor(log, data, client) {
+    super(log, data, client);
+    this.model = 'Rollershutter';
+    this.service = new Service.WindowCovering();
+    this.stateCharacteristic = Characteristic.CurrentPosition;
+    this.targetCharacteristic = Characteristic.TargetPosition;
   }
 
+  transformData(data) {
+    return (data && data.attributes) ? data.attributes.current_position : null;
+  }
+
+  setTargetState(position, callback, context) {
+    if (context === 'internal') {
+      callback();
+      return;
+    }
+
+    const payload = {
+      entity_id: this.entity_id,
+      position,
+    };
+
+    this.log(`Setting the state of the ${this.name} to ${payload.position}`);
+
+    this.client.callService(this.domain, 'set_cover_position', payload, (data) => {
+      if (data) {
+        callback();
+      } else {
+        callback(communicationError);
+      }
+    });
+  }
 }
+
+class HomeAssistantRollershutterBinary extends HomeAssistantRollershutter {
+  transformData(data) {
+    return (data && data.state) ? ((data.state === 'open') * 100) : null;
+  }
+
+  setTargetState(position, callback, context) {
+    if (context === 'internal') {
+      callback();
+      return;
+    }
+
+    if (!(position === 100 || position === 0)) {
+      this.log('Cannot set this cover to positions other than 0 or 100');
+      callback(communicationError); // TODO
+    } else {
+      this.doChangeState(position === 100 ? 'open_cover' : 'close_cover', callback);
+    }
+  }
+}
+
+function HomeAssistantCoverFactory(log, data, client) {
+  if (!data.attributes) {
+    return null;
+  }
+
+  if (data.attributes.homebridge_cover_type === 'garage_door') {
+    return new HomeAssistantGarageDoor(log, data, client);
+  } else if (data.attributes.homebridge_cover_type === 'rollershutter') {
+    if (data.attributes.current_position !== undefined) {
+      return new HomeAssistantRollershutter(log, data, client);
+    }
+    return new HomeAssistantRollershutterBinary(log, data, client);
+  }
+  log.error(`'${data.entity_id}' is a cover but does not have a 'homebridge_cover_type' property set. ` +
+            'You must set it to either \'rollershutter\' or \'garage_door\' in the customize section ' +
+            'of your Home Assistant configuration. It will not be available to Homebridge until you do. ' +
+            'See the README.md for more information. ' +
+            'The attributes that were found are:', JSON.stringify(data.attributes));
+}
+
+function HomeAssistantCoverPlatform(oService, oCharacteristic, oCommunicationError) {
+  Service = oService;
+  Characteristic = oCharacteristic;
+  communicationError = oCommunicationError;
+
+  return HomeAssistantCoverFactory;
+}
+
+module.exports = HomeAssistantCoverPlatform;
+
+module.exports.HomeAssistantCoverFactory = HomeAssistantCoverFactory;

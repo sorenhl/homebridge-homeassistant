@@ -1,8 +1,8 @@
 {
   "name": "homebridge-homeassistant",
-  "version": "1.7.0",
+  "version": "2.0.7",
   "description": "Homebridge plugin for Home Assistant: https://home-assistant.io",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "keywords": [
     "homebridge-plugin",
     "homebridge",
@@ -28,5 +28,12 @@
   "dependencies": {
     "eventsource": "^0.2.1",
     "request": "^2.69.0"
+  },
+  "devDependencies": {
+    "eslint": "^3.13.1",
+    "eslint-config-airbnb-base": "^11.1.0"
+  },
+  "scripts": {
+    "test": "eslint index.js accessories/*"
   }
 }

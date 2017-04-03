@@ -19,30 +19,27 @@ automatically. Easy peasey.
 Here's a list of the devices that are currently exposed:
 
 * **Binary Sensor** - door, leak, moisture, motion, smoke, and window state
+* **Climate** - current temperature, target temperature, heat/cool mode
 * **Cover** - exposed as a garage door or window covering (see notes)
+* **Device Tracker** - home/not home status appears as an occupancy sensor
 * **Fan** - on/off/speed
 * **Input boolean** - on/off
 * **Lights** - on/off/brightness
 * **Lock** - lock/unlock lock
 * **Media Players** - exposed as an on/off switch
 * **Scenes** - exposed as an on/off switch
-* **Sensors** - temperature, light and humidity sensors
+* **Sensors** - carbon dioxide (CO2), humidity, light, temperature sensors
 * **Switches** - on/off
-
-These devices are currently exposed __but will be removed in the near future__ as [they have been removed from Home Assistant as of 0.32](https://github.com/home-assistant/home-assistant/pull/4037):
-
-* **Garage Door** - open/close garage door
-* **Rollershutter** - exposed as a garage door
 
 ### Binary Sensor Support
 
-Binary Sensors must have a `sensor_class` set. Accepted `sensor_class`es are `moisture`, `motion`, `occupancy`, `opening` and `smoke`. 
+Binary Sensors must have a `device_class` set. Accepted `device_class`es are `moisture`, `motion`, `occupancy`, `opening` and `smoke`.
 
-For binary sensors with the `opening` `sensor_class` you can also set `homebridge_opening_type` to `window` to have the entity display as a window instead of a door to Homebridge.
+For binary sensors with the `opening` `device_class` you can also set `homebridge_opening_type` to `window` to have the entity display as a window instead of a door to Homebridge.
 
 ### Cover Support
 
-Covers on your Home Assistant will appear as a garage door by default. In order 
+Covers on your Home Assistant will appear as a garage door by default. In order
 to do change this you may specify its type in the `customize` section of your
 Home Assistant's `configuration.yaml`. Refer to the following example:
 
@@ -53,6 +50,10 @@ customize:
   cover.garage:
     homebridge_cover_type: garage_door
 ```
+
+### Device Tracker
+
+Device trackers will appear in HomeKit as a room occupancy sensor.
 
 ### Media Player Support
 
@@ -73,6 +74,16 @@ Scenes will appear to HomeKit as switches. To trigger them, you can simply say
 HomeKit...like "Good Morning" and "Good Night". These scenes already exist and
 cannot be deleted. Simply add your Home Assistant scene to them and set the
 state you would like them to be when executed. That's most like the ON state.
+The switch will automatically turn off shortly after turning on.
+
+### Sensor Support
+
+Carbon dioxide (CO2), humidity, light and temperature sensors are currently supported.
+
+- Light sensors will be found if an entity has its unit of measurement set to `lux`.
+- Temperature sesnsors will be found if an entity has its unit of measurement set to `°C` or `°C`.
+- Humidity sensors will be found if an entity has its unit of measurement set to `%` and has an entity ID containing `humidity` _or_ `homebridge_sensor_type` is set to `humidity` on the entity.
+- Carbon Dioxide (CO2) sensors will be found if an entity has its unit of measurement set to `ppm` and has an entity ID containing `co2` _or_ `homebridge_sensor_type` is set to `co2` on the entity.
 
 ## Installation
 
@@ -82,10 +93,13 @@ After installing and setting up [Homebridge](https://github.com/nfarina/homebrid
 
 Once installed, update your Homebridge's `config.json`.
 
+You can run `sudo npm upgrade -g homebridge-homeassistant` to upgrade your installation at any time.
+
 ## Configuration
 
 As with other Homebridge plugins, you configure the Home Assistant plugin by
 adding it to your `config.json`.
+To avoid too much information in your log, just set `logging` to `false` as soon as everything works smoothly.
 
 ```json
 "platforms": [
@@ -94,7 +108,8 @@ adding it to your `config.json`.
     "name": "HomeAssistant",
     "host": "http://127.0.0.1:8123",
     "password": "yourapipassword",
-    "supported_types": ["binary_sensor", "cover", "fan", "input_boolean", "light", "lock", "media_player", "scene", "sensor", "switch"]
+    "supported_types": ["binary_sensor", "climate", "cover", "device_tracker", "fan", "input_boolean", "light", "lock", "media_player", "scene", "sensor", "switch"],
+    "logging": true
   }
 ]
 ```
